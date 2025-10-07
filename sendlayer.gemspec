@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'lib/sendlayer/version'
+
 Gem::Specification.new do |spec|
   spec.name          = "sendlayer"
   spec.version       = ::SendLayer::VERSION
