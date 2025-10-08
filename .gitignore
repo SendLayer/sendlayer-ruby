@@ -1,0 +1,10 @@
+/.bundle
+/public/assets
+.env
+/coverage
+
+*.gem
+*.gem.lock
+
+
+/spec/examples.txt
