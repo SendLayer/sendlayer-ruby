@@ -75,9 +75,12 @@ jobs:
       - name: Get version from VERSION file
         id: get_version
         run: |
-          VERSION=$(cat lib/sendlayer/version.rb | grep "VERSION = " | sed "s/VERSION = '\(.*\)'/\1/")
+          VERSION=$(ruby -e "require './lib/sendlayer/version'; puts SendLayer::VERSION.strip")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # VERSION=$(cat lib/sendlayer/version.rb | grep "VERSION = " | sed "s/VERSION = '\(.*\)'/\1/")
+          # echo "VERSION=$VERSION" >> $GITHUB_ENV
+          # echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create and push tag
         run: |
