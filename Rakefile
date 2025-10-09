@@ -12,7 +12,7 @@ desc 'Run all tests and code quality checks'
 task ci: [:spec, :rubocop]
 
 desc 'Build the gem'
-task build: :gemspec do
+task :build do
   sh 'gem build sendlayer.gemspec'
 end
 
