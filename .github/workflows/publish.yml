@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      skip_rubygems:
+        description: 'Skip RubyGems publishing'
+        required: false
+        default: 'true'
+        type: boolean
 
 permissions:
   contents: write
@@ -34,6 +41,7 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_rubygems || github.event_name == 'push' }}
 
     permissions:
       contents: write
@@ -54,7 +62,8 @@ jobs:
         uses: rubygems/release-gem@v1
 
   github-release:
-    needs: publish
+    needs: [test, publish]
+    if: always() && (needs.publish.result == 'skipped' || needs.publish.result == 'success')
     runs-on: ubuntu-latest
     steps:  
       - name: Checkout code
@@ -78,9 +87,6 @@ jobs:
           VERSION=$(ruby -e "require './lib/sendlayer/version'; puts SendLayer::VERSION.strip")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          # VERSION=$(cat lib/sendlayer/version.rb | grep "VERSION = " | sed "s/VERSION = '\(.*\)'/\1/")
-          # echo "VERSION=$VERSION" >> $GITHUB_ENV
-          # echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create and push tag
         run: |
