@@ -19,10 +19,15 @@ module SendLayer
 
     def send(from:, to:, subject:, text: nil, html: nil, cc: nil, bcc: nil, reply_to: nil,
              attachments: nil, headers: nil, tags: nil)
-      
+
+      # Empty strings are treated as absent, so a caller passing text: '' gets a
+      # validation error rather than an email with no body.
+      has_html = !html.nil? && html != ''
+      has_text = !text.nil? && text != ''
+
       # Validate required parameters
-      raise SendLayerValidationError.new("Either 'text' or 'html' content must be provided") if text.nil? && html.nil?
-      
+      raise SendLayerValidationError.new("Either 'text' or 'html' content must be provided") unless has_html || has_text
+
       # Prepare email data
       email_data = {
         From: normalize_recipient(from, 'sender'),
@@ -30,13 +35,12 @@ module SendLayer
         Subject: subject
       }
 
-      if html
-        email_data[:ContentType] = "HTML"
-        email_data[:HTMLContent] = html
-      else
-        email_data[:ContentType] = "Text"
-        email_data[:PlainContent] = text
-      end
+      # Both parts are sent when both are supplied. The previous if/else could
+      # only ever emit one of them, which silently dropped the plain-text part.
+      # HTML wins for the declared content type whenever an HTML body is present.
+      email_data[:ContentType] = has_html ? 'HTML' : 'Text'
+      email_data[:HTMLContent] = html if has_html
+      email_data[:PlainContent] = text if has_text
       email_data[:CC] = normalize_recipients(cc) if cc
       email_data[:BCC] = normalize_recipients(bcc) if bcc
       email_data[:ReplyTo] = normalize_recipients(reply_to, 'reply_to') if reply_to
@@ -77,7 +81,7 @@ module SendLayer
 
     def normalize_recipients(recipients, role = 'recipient')
       return nil if recipients.nil?
-      
+
       case recipients
       when String
         [normalize_recipient(recipients, role)]
