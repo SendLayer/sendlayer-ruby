@@ -94,5 +94,68 @@ RSpec.describe SendLayer::Emails do
         }.to raise_error(SendLayer::SendLayerValidationError, /Invalid recipients format/)
       end
     end
+
+    context 'with both html and text content' do
+      it 'sends both parts and declares ContentType HTML' do
+        captured = nil
+        allow(client).to receive(:make_request) do |_method, _endpoint, data|
+          captured = data
+          { 'MessageID' => 'test-123' }
+        end
+
+        emails.send(
+          from: 'test@example.com',
+          to: 'recipient@example.com',
+          subject: 'Test',
+          text: 'Plain fallback',
+          html: '<p>Rich body</p>'
+        )
+
+        expect(captured[:ContentType]).to eq('HTML')
+        expect(captured[:HTMLContent]).to eq('<p>Rich body</p>')
+        expect(captured[:PlainContent]).to eq('Plain fallback')
+      end
+
+      it 'omits PlainContent when only html is supplied' do
+        captured = nil
+        allow(client).to receive(:make_request) do |_method, _endpoint, data|
+          captured = data
+          { 'MessageID' => 'test-123' }
+        end
+
+        emails.send(from: 'test@example.com', to: 'r@example.com', subject: 'T', html: '<p>x</p>')
+
+        expect(captured[:ContentType]).to eq('HTML')
+        expect(captured[:HTMLContent]).to eq('<p>x</p>')
+        expect(captured).not_to have_key(:PlainContent)
+      end
+
+      it 'omits HTMLContent when only text is supplied' do
+        captured = nil
+        allow(client).to receive(:make_request) do |_method, _endpoint, data|
+          captured = data
+          { 'MessageID' => 'test-123' }
+        end
+
+        emails.send(from: 'test@example.com', to: 'r@example.com', subject: 'T', text: 'plain')
+
+        expect(captured[:ContentType]).to eq('Text')
+        expect(captured[:PlainContent]).to eq('plain')
+        expect(captured).not_to have_key(:HTMLContent)
+      end
+
+      it 'treats empty strings as absent content' do
+        expect {
+          emails.send(from: 'test@example.com', to: 'r@example.com', subject: 'T', text: '', html: '')
+        }.to raise_error(SendLayer::SendLayerValidationError, /Either 'text' or 'html'/)
+      end
+
+      it 'accepts the string "0" as content' do
+        allow(client).to receive(:make_request).and_return({ 'MessageID' => 'x' })
+        expect {
+          emails.send(from: 'test@example.com', to: 'r@example.com', subject: 'T', text: '0')
+        }.not_to raise_error
+      end
+    end
   end
 end

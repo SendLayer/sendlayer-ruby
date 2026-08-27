@@ -83,6 +83,17 @@ response = sendlayer.emails.send(
   html: '<h1>Welcome!</h1><p>Welcome to our platform!</p>'
 )
 
+# HTML with a plain-text fallback -- supply both and both parts are sent.
+# ContentType is reported as HTML, and clients that cannot render HTML fall
+# back to the plain-text part.
+response = sendlayer.emails.send(
+  from: 'sender@example.com',
+  to: 'recipient@example.com',
+  subject: 'Welcome!',
+  html: '<h1>Welcome!</h1><p>Welcome to our platform!</p>',
+  text: 'Welcome! Welcome to our platform!'
+)
+
 # Complex email with multiple recipients and attachments
 response = sendlayer.emails.send(
   from: { email: 'sender@example.com', name: 'Sender' },
@@ -153,7 +164,16 @@ sendlayer.webhooks.delete(123)
 
 ## Error Handling
 
-The SDK provides specific exception types for different error scenarios:
+Every SendLayer exception carries the same attributes, so you can read them
+without first checking which subclass you rescued:
+
+| Attribute | Description |
+|---|---|
+| `message` | Human-readable message, taken from the API's own error text when available |
+| `status_code` | HTTP status of the response, or `nil` for local errors (timeouts, connection failures, validation) |
+| `response` | Decoded response body, or `{}` when unavailable |
+| `errors` | Raw SendLayer `Errors` entries, each with the API's numeric `Code` and `Message`; empty for local errors |
+| `codes` | Just the numeric codes from `errors`, for branching |
 
 ```ruby
 require 'sendlayer'
@@ -165,28 +185,68 @@ begin
     subject: 'Test Email',
     text: 'This is a test email'
   )
-rescue SendLayer::SendLayerAPIError => e
-  puts "API error: #{e.message} (Status: #{e.status_code})"
+rescue SendLayer::SendLayerAuthenticationError => e
+  puts "Check your API key: #{e.message}"
 rescue SendLayer::SendLayerValidationError => e
   puts "Validation error: #{e.message}"
-rescue SendLayer::SendLayerAuthenticationError => e
-  puts "Authentication error: #{e.message}"
+rescue SendLayer::SendLayerRateLimitError => e
+  puts "Slow down: #{e.message}"
 rescue SendLayer::SendLayerError => e
-  puts "SendLayer error: #{e.message}"
-rescue => e
-  puts "Unexpected error: #{e.message}"
+  # Base type -- also catches timeouts, connection errors and any API error
+  # without a more specific type.
+  puts "SendLayer error: #{e.message} (status: #{e.status_code.inspect})"
+  puts "Codes: #{e.codes.inspect}"
 end
 ```
 
+Branch on SendLayer's numeric error codes with `codes`:
+
+```ruby
+rescue SendLayer::SendLayerError => e
+  puts 'That sender domain is not authorised.' if e.codes.include?(14)
+end
+```
+
+See the [error code reference](https://developers.sendlayer.com/api-reference/error-codes)
+for the full list.
+
 ## Exception Types
 
-- `SendLayer::SendLayerError`: Base exception for all SendLayer errors
-- `SendLayer::SendLayerAPIError`: API-specific errors with status code and response data
-- `SendLayer::SendLayerAuthenticationError`: Invalid API key or authentication issues
-- `SendLayer::SendLayerValidationError`: Invalid parameters or validation errors
-- `SendLayer::SendLayerNotFoundError`: Resource not found (404 errors)
-- `SendLayer::SendLayerRateLimitError`: Rate limit exceeded (429 errors)
-- `SendLayer::SendLayerInternalServerError`: Server errors (5xx errors)
+| Exception | Raised for |
+|---|---|
+| `SendLayer::SendLayerError` | Base type for everything below, and for local errors: timeouts, connection failures and undecodable responses |
+| `SendLayer::SendLayerValidationError` | Invalid parameters (raised locally), and HTTP 400 / 422 |
+| `SendLayer::SendLayerAuthenticationError` | HTTP 401 -- invalid API key |
+| `SendLayer::SendLayerNotFoundError` | HTTP 404 |
+| `SendLayer::SendLayerRateLimitError` | HTTP 429 |
+| `SendLayer::SendLayerInternalServerError` | HTTP 500 |
+| `SendLayer::SendLayerAPIError` | Any other error status, including 5xx other than 500 |
+
+`SendLayerAPIError` is the only type whose `message` is prefixed -- it reads
+`API Error <status>: <message>`. Every other type carries the API's message
+unchanged.
+
+Requests time out after 30 seconds by default and raise `SendLayerError`. A
+`Net::HTTP` exception is never surfaced to the caller.
+
+## Configuration
+
+Pass an options hash as the second argument:
+
+```ruby
+sendlayer = SendLayer::SendLayer.new('your-api-key', {
+  timeout: 60,                      # seconds to wait for the API (default 30)
+  attachment_url_timeout: 45_000,   # ms to wait when fetching a remote attachment (default 30000)
+  headers: { 'X-Request-Id' => 'abc123' } # extra headers sent with every request
+})
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `:timeout` | `30` | Seconds to wait for the API before raising `SendLayerError` |
+| `:attachment_url_timeout` | `30000` | Milliseconds to wait when downloading an attachment from a URL |
+| `:headers` | `{}` | Extra request headers. Cannot override `Authorization` |
+| `:base_url` | SendLayer API v1 | Override the API base URL |
 
 ## Supported Events
 

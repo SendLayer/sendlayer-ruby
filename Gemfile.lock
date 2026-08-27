@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    sendlayer (1.0.0)
+    sendlayer (1.1.0)
       mime-types (~> 3.4)
 
 GEM
